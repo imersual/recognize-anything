@@ -671,6 +671,9 @@ class BertModel(BertPreTrainedModel):
     input to the forward pass.
     """
 
+    _tied_weights_keys = {}
+    all_tied_weights_keys = {}
+
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -682,6 +685,25 @@ class BertModel(BertPreTrainedModel):
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
+
+    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
+        if head_mask is not None:
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
+        else:
+            head_mask = [None] * num_hidden_layers
+        return head_mask
+
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        if head_mask.dim() == 1:
+            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+        elif head_mask.dim() == 2:
+            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+        assert head_mask.dim() == 5
+        head_mask = head_mask.to(dtype=self.dtype)
+        return head_mask
  
 
     def get_input_embeddings(self):
