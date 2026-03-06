@@ -38,9 +38,9 @@ from transformers.modeling_outputs import (
 )
 from transformers.pytorch_utils import (
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
     prune_linear_layer
 )
+
 from transformers.modeling_utils import (
     PreTrainedModel
 )
@@ -304,10 +304,26 @@ class BertAttention(nn.Module):
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
+    def find_pruneable_heads_and_indices(
+        heads: set, n_heads: int, head_size: int, already_pruned_heads: set
+    ) -> tuple[set, torch.LongTensor]:
+        """
+        Finds the heads and their indices taking into account the already pruned heads.
+        """
+        mask = torch.ones(n_heads, head_size)
+        heads = set(heads) - already_pruned_heads  # remove already pruned heads
+        for head in heads:
+            # Adjust head index to account for already pruned heads that come before it
+            head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+            mask[head] = 0
+        mask = mask.view(-1).contiguous().eq(1)
+        index = torch.arange(len(mask))[mask].long()
+        return heads, index
+
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(
+        heads, index = self.find_pruneable_heads_and_indices(
             heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
         )
 
